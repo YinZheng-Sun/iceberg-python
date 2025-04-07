@@ -438,6 +438,15 @@ class Transaction:
         """
         return UpdateSnapshot(self, io=self._table.io, snapshot_properties=snapshot_properties)
 
+    def update_statistics(self) -> UpdateStatistics:
+        """
+        Create a new UpdateStatistics to update the statistics of the table.
+
+        Returns:
+            A new UpdateStatistics
+        """
+        return UpdateStatistics(transaction=self)
+
     def append(self, df: pa.Table, snapshot_properties: Dict[str, str] = EMPTY_DICT) -> None:
         """
         Shorthand API for appending a PyArrow table to a table transaction.
@@ -1207,10 +1216,11 @@ class Table:
 
                 update_row_cnt = len(rows_to_update)
 
-                # build the match predicate filter
-                overwrite_mask_predicate = upsert_util.create_match_filter(rows_to_update, join_cols)
+                if len(rows_to_update) > 0:
+                    # build the match predicate filter
+                    overwrite_mask_predicate = upsert_util.create_match_filter(rows_to_update, join_cols)
 
-                tx.overwrite(rows_to_update, overwrite_filter=overwrite_mask_predicate)
+                    tx.overwrite(rows_to_update, overwrite_filter=overwrite_mask_predicate)
 
             if when_not_matched_insert_all:
                 expr_match = upsert_util.create_match_filter(matched_iceberg_table, join_cols)
@@ -1220,7 +1230,8 @@ class Table:
 
                 insert_row_cnt = len(rows_to_insert)
 
-                tx.append(rows_to_insert)
+                if insert_row_cnt > 0:
+                    tx.append(rows_to_insert)
 
         return UpsertResult(rows_updated=update_row_cnt, rows_inserted=insert_row_cnt)
 
@@ -1792,7 +1803,7 @@ class DataScan(TableScan):
         return pa.RecordBatchReader.from_batches(
             target_schema,
             batches,
-        )
+        ).cast(target_schema)
 
     def to_pandas(self, **kwargs: Any) -> pd.DataFrame:
         """Read a Pandas DataFrame eagerly from this Iceberg table.
